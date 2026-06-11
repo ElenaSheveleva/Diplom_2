@@ -2,7 +2,6 @@ package api;
 
 import io.qameta.allure.Description;
 import io.qameta.allure.Feature;
-import io.qameta.allure.Step;
 import io.qameta.allure.junit4.DisplayName;
 import io.restassured.response.Response;
 import models.User;
@@ -10,178 +9,104 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.*;
+import static org.apache.http.HttpStatus.SC_FORBIDDEN;
+import static org.apache.http.HttpStatus.SC_OK;
+import static org.hamcrest.Matchers.equalTo;
 
 @Feature("Создание пользователя")
 public class CreateUserTest extends BaseTest {
 
     private User user;
     private String accessToken;
+    private UserClient userClient;
 
     @Before
-    @Step("Создание тестовых данных для пользователя")
     public void setUpData() {
+        userClient = new UserClient();
         user = new User("testuser_" + System.currentTimeMillis() + "@yandex.ru", "password123", "TestUser");
     }
 
     @After
-    @Step("Очистка тестовых данных: удаление пользователя")
     public void cleanUp() {
         if (accessToken != null) {
-            String cleanToken = accessToken.startsWith("Bearer ") ? accessToken.substring(7) : accessToken;
-            given()
-                    .header("Authorization", "Bearer " + cleanToken)
-                    .when()
-                    .delete("/api/auth/user");
+            userClient.deleteUser(accessToken);
         }
     }
 
     @Test
-    @DisplayName("Создание уникального пользователя - проверка статуса 200")
-    public void createUniqueUserShouldReturn200Test() {
-        Response response = given()
-                .header("Content-type", "application/json")
-                .body(user)
-                .when()
-                .post("/api/auth/register");
-
-        response.then().statusCode(200);
-        accessToken = response.jsonPath().getString("accessToken");
-    }
-
-    @Test
-    @DisplayName("Создание уникального пользователя - проверка поля success")
-    public void createUniqueUserShouldReturnSuccessTrueTest() {
-        Response response = given()
-                .header("Content-type", "application/json")
-                .body(user)
-                .when()
-                .post("/api/auth/register");
-
-        response.then().body("success", equalTo(true));
+    @DisplayName("Создание уникального пользователя - проверка статуса и success")
+    @Description("Проверка успешного создания нового уникального пользователя")
+    public void createUniqueUserShouldReturnSuccessTest() {
+        Response response = userClient.register(user);
+        response.then()
+                .statusCode(SC_OK)
+                .body("success", equalTo(true));
         accessToken = response.jsonPath().getString("accessToken");
     }
 
     @Test
     @DisplayName("Создание уникального пользователя - проверка email")
+    @Description("Проверка email созданного пользователя")
     public void createUniqueUserShouldReturnCorrectEmailTest() {
-        Response response = given()
-                .header("Content-type", "application/json")
-                .body(user)
-                .when()
-                .post("/api/auth/register");
-
-        response.then().body("user.email", equalTo(user.getEmail().toLowerCase()));
+        Response response = userClient.register(user);
+        response.then()
+                .statusCode(SC_OK)
+                .body("user.email", equalTo(user.getEmail().toLowerCase()));
         accessToken = response.jsonPath().getString("accessToken");
     }
 
     @Test
     @DisplayName("Создание уникального пользователя - проверка имени")
+    @Description("Проверка имени созданного пользователя")
     public void createUniqueUserShouldReturnCorrectNameTest() {
-        Response response = given()
-                .header("Content-type", "application/json")
-                .body(user)
-                .when()
-                .post("/api/auth/register");
-
-        response.then().body("user.name", equalTo(user.getName()));
+        Response response = userClient.register(user);
+        response.then()
+                .statusCode(SC_OK)
+                .body("user.name", equalTo(user.getName()));
         accessToken = response.jsonPath().getString("accessToken");
     }
 
     @Test
-    @DisplayName("Создание пользователя, который уже зарегистрирован - проверка статуса 403")
-    public void createExistingUserShouldReturn403Test() {
-        given()
-                .header("Content-type", "application/json")
-                .body(user)
-                .when()
-                .post("/api/auth/register");
-
-        Response response = given()
-                .header("Content-type", "application/json")
-                .body(user)
-                .when()
-                .post("/api/auth/register");
-
-        response.then().statusCode(403);
-    }
-
-    @Test
-    @DisplayName("Создание пользователя, который уже зарегистрирован - проверка поля success")
-    public void createExistingUserShouldReturnSuccessFalseTest() {
-        given()
-                .header("Content-type", "application/json")
-                .body(user)
-                .when()
-                .post("/api/auth/register");
-
-        Response response = given()
-                .header("Content-type", "application/json")
-                .body(user)
-                .when()
-                .post("/api/auth/register");
-
-        response.then().body("success", equalTo(false));
+    @DisplayName("Создание пользователя, который уже зарегистрирован - проверка статуса и success")
+    @Description("Проверка ошибки при попытке создать пользователя с уже существующим email")
+    public void createExistingUserShouldReturnErrorTest() {
+        userClient.register(user);
+        Response response = userClient.register(user);
+        response.then()
+                .statusCode(SC_FORBIDDEN)
+                .body("success", equalTo(false));
     }
 
     @Test
     @DisplayName("Создание пользователя, который уже зарегистрирован - проверка сообщения")
+    @Description("Проверка сообщения об ошибке")
     public void createExistingUserShouldReturnErrorMessageTest() {
-        given()
-                .header("Content-type", "application/json")
-                .body(user)
-                .when()
-                .post("/api/auth/register");
-
-        Response response = given()
-                .header("Content-type", "application/json")
-                .body(user)
-                .when()
-                .post("/api/auth/register");
-
-        response.then().body("message", equalTo("User already exists"));
+        userClient.register(user);
+        Response response = userClient.register(user);
+        response.then()
+                .statusCode(SC_FORBIDDEN)
+                .body("message", equalTo("User already exists"));
     }
 
     @Test
-    @DisplayName("Создание пользователя без email - проверка статуса 403")
-    public void createUserWithoutEmailShouldReturn403Test() {
+    @DisplayName("Создание пользователя без email - проверка статуса и success")
+    @Description("Проверка ошибки при регистрации без email")
+    public void createUserWithoutEmailShouldReturnErrorTest() {
         User userWithoutEmail = new User(null, "password123", "TestUser");
-
-        Response response = given()
-                .header("Content-type", "application/json")
-                .body(userWithoutEmail)
-                .when()
-                .post("/api/auth/register");
-
-        response.then().statusCode(403);
-    }
-
-    @Test
-    @DisplayName("Создание пользователя без email - проверка поля success")
-    public void createUserWithoutEmailShouldReturnSuccessFalseTest() {
-        User userWithoutEmail = new User(null, "password123", "TestUser");
-
-        Response response = given()
-                .header("Content-type", "application/json")
-                .body(userWithoutEmail)
-                .when()
-                .post("/api/auth/register");
-
-        response.then().body("success", equalTo(false));
+        Response response = userClient.register(userWithoutEmail);
+        response.then()
+                .statusCode(SC_FORBIDDEN)
+                .body("success", equalTo(false));
     }
 
     @Test
     @DisplayName("Создание пользователя без email - проверка сообщения")
+    @Description("Проверка сообщения об ошибке")
     public void createUserWithoutEmailShouldReturnErrorMessageTest() {
         User userWithoutEmail = new User(null, "password123", "TestUser");
-
-        Response response = given()
-                .header("Content-type", "application/json")
-                .body(userWithoutEmail)
-                .when()
-                .post("/api/auth/register");
-
-        response.then().body("message", equalTo("Email, password and name are required fields"));
+        Response response = userClient.register(userWithoutEmail);
+        response.then()
+                .statusCode(SC_FORBIDDEN)
+                .body("message", equalTo("Email, password and name are required fields"));
     }
 }
